@@ -1,74 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'dart:ui';
-
-void main() {
-  runApp(MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: DashedLineAnimation(),
-        ),
-      ),
-    );
-  }
-}
-//thang
-//fdsfsdddddfd
-
-class DashedLineAnimation extends StatefulWidget {
-  @override
-  _DashedLineAnimationState createState() => _DashedLineAnimationState();
-}
-
-class _DashedLineAnimationState extends State<DashedLineAnimation>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-
-    // Tạo một AnimationController với thời gian hoạt động
-    _controller = AnimationController(
-      vsync: this,
-      duration: Duration(seconds: 10), // Kéo dài thời gian để vẽ nhiều đoạn
-    );
-
-    // Tạo một Tween để giá trị animation đi từ 0.0 -> 1.0
-    _animation = Tween<double>(begin: 0.0, end: 2.0).animate(_controller)
-      ..addListener(() {
-        setState(() {}); // Cập nhật UI khi giá trị animation thay đổi
-      });
-
-    // Bắt đầu animation
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(300, 300),
-      painter: DashedLinePainter(progress: _animation.value),
-    );
-  }
-}
 
 class DashedLinePainter extends CustomPainter {
-  final double progress; // Giá trị animation để vẽ từ từ
+  final Offset startPoint;
+  final Offset endPoint;
+  final double progress;
 
-  DashedLinePainter({required this.progress});
+  DashedLinePainter({
+    required this.startPoint,
+    required this.endPoint,
+    required this.progress,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -77,63 +19,140 @@ class DashedLinePainter extends CustomPainter {
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke;
 
-    // Tạo path cho đường đi với nhiều đoạn
     final path = Path();
 
-    // Bắt đầu từ góc dưới bên trái
-    path.moveTo(0, size.height);
+    // Parameters for the dashed line
+    double dashLength = 10.0; // Length of each dash
+    double gapLength = 5.0; // Length of each gap
 
-    // Đoạn 1: Sang phải
-    path.lineTo(size.width / 4, size.height);
+    // Calculate total distance
+    double totalDistance = (endPoint - startPoint).distance;
 
-    // Đoạn 2: Lên trên
-    path.lineTo(size.width / 4, size.height * 3 / 4);
+    // Calculate the number of dashes to draw based on progress
+    double totalDashes = (totalDistance / (dashLength + gapLength)) * progress;
 
-    // Đoạn 3: Sang phải
-    path.lineTo(size.width / 2, size.height * 3 / 4);
+    double currentX = startPoint.dx;
+    double currentY = startPoint.dy;
 
-    // Đoạn 4: Lên trên
-    path.lineTo(size.width / 2, size.height / 2);
-
-    path.lineTo(size.width - 60, size.height * 1 / 2);
-    path.lineTo(size.width * 0.8, size.height / 4);
-
-    // // Đoạn 5: Sang trái
-    // path.lineTo(size.width / 2, size.height / 2);
-    //
-    // // Đoạn 6: Lên trên
-    // path.lineTo(size.width / 2, size.height / 4);
-    //
-    // // Đoạn 7: Sang trái
-    // path.lineTo(0, size.height / 4);
-    //
-    // // Đoạn 8: Lên trên đến góc trên cùng bên trái
-    // path.lineTo(0, 0);
-
-    // Vẽ từng phần của đường nét đứt dựa trên progress
-    drawDashedPath(canvas, path, paint, progress);
-  }
-
-  void drawDashedPath(Canvas canvas, Path path, Paint paint, double progress) {
-    final dashWidth = 10.0;
-    final dashSpace = 5.0;
-    final pathMetrics = path.computeMetrics();
-
-    for (var metric in pathMetrics) {
-      var distance = 0.0;
-      final totalLength = metric.length * progress; // Vẽ theo tỉ lệ progress
-
-      while (distance < totalLength) {
-        final nextDistance = distance + dashWidth;
-        final extractPath = metric.extractPath(distance, nextDistance);
-        canvas.drawPath(extractPath, paint);
-        distance = nextDistance + dashSpace;
+    for (int i = 0; i < totalDashes; i++) {
+      // Draw dashes
+      path.moveTo(currentX, currentY);
+      currentX += dashLength;
+      if (currentX > endPoint.dx) {
+        currentX = endPoint.dx; // Limit to end point
       }
+      currentY += (endPoint.dy - startPoint.dy) / totalDistance * dashLength;
+      path.lineTo(currentX, currentY);
+
+      // Move to the next gap
+      currentX += gapLength;
+      if (currentX > endPoint.dx) {
+        currentX = endPoint.dx; // Limit to end point
+      }
+      currentY += (endPoint.dy - startPoint.dy) / totalDistance * gapLength;
     }
+
+    canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(DashedLinePainter oldDelegate) {
-    return oldDelegate.progress != progress; // Vẽ lại khi progress thay đổi
+  bool shouldRepaint(covariant CustomPainter oldDelegate) {
+    return true;
   }
+}
+
+class DashedLineAnimation extends StatefulWidget {
+  @override
+  _DashedLineAnimationState createState() => _DashedLineAnimationState();
+}
+
+class _DashedLineAnimationState extends State<DashedLineAnimation> {
+  double progress = 0.0;
+  late Timer timer;
+  bool isBVisible = false;
+  bool isADimmed = false;
+
+  final Offset startPoint = Offset(50, 450);
+  final Offset endPoint = Offset(250, 150);
+
+  @override
+  void initState() {
+    super.initState();
+    timer = Timer.periodic(Duration(milliseconds: 50), (timer) {
+      setState(() {
+        progress += 0.01; // Tăng dần độ dài đã vẽ
+
+        // Hiển thị điểm B khi vẽ được nửa đoạn
+        if (progress >= 0.5 && !isBVisible) {
+          isBVisible = true; // Hiện điểm B
+        }
+
+        // Đổi màu điểm A sau khi điểm B hiển thị
+        if (isBVisible) {
+          isADimmed = true; // Đổi màu điểm A
+        }
+
+        if (progress >= 1.0) {
+          progress = 1.0; // Đặt lại giá trị progress
+          timer.cancel();
+
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Stack(
+          children: [
+            CustomPaint(
+              size: Size(300, 500),
+              painter: DashedLinePainter(
+                startPoint: startPoint,
+                endPoint: endPoint,
+                progress: progress,
+              ),
+            ),
+            // Hiển thị điểm A (dưới) với vòng tròn bao quanh
+            Positioned(
+              left: startPoint.dx - 25,
+              top: startPoint.dy - 25,
+              child: Container(
+                width: 50,
+                height: 50,
+                child: isADimmed
+                    ? Image.asset('assets/images/img_home_disconnect.png')
+                    : Image.asset('assets/images/img_home.png'),
+              ),
+            ),
+            // Hiển thị điểm B (trên) với vòng tròn bao quanh
+            if (isBVisible)
+              Positioned(
+                left: endPoint.dx - 25,
+                top: endPoint.dy - 25,
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  child: Image.asset('assets/images/img_school.png'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void main() {
+  runApp(MaterialApp(
+    home: DashedLineAnimation(),
+  ));
 }
